@@ -11,6 +11,8 @@ excluded_tasks = ('Total', 't_total', 't_algo', 't_frame',
                   'IMU preint', 'Image Resize',
                   'ATE', 'n_frames')
 
+colors = ["red", "green", "blue"]
+
 class GroupedFigure:
     """
     Class for managing group of pyplot figures and setting the same x/y ranges for all of them.
@@ -234,7 +236,7 @@ def plot_speedup(datas, titles, mode):
     mode can be set to:
         'absolute': Print absolute time taken
         'frame': Print time per frame
-        'speedup': Speedup of all datas agaist the first 1
+        'speedup': Speedup of all datas agaist the first 1 (Current version only two datas)
     """
     fig, ax = plt.subplots(figsize=(12, 5))
     
@@ -247,10 +249,16 @@ def plot_speedup(datas, titles, mode):
             title_text = "Mean execution time per frame version comparison"
         case 'speedup':
             xlabel_text = "Speedup"
-            title_text = f"Speedup comparison Vs version {titles[0]}"
+            title_text = f"Speedup comparison Vs {titles[0]} version"
         case _:
             print("Invalid plotting mode")
             return
+        
+    #Datasets consistency checkout
+    dataset_names = [dataset['name'] for dataset in datas[0]]
+    for data in datas:
+        for i, dataset in enumerate(data):
+            assert dataset_names[i] == dataset['name']
     
     if mode in ('absolute', 'frame'):
         times = list()
@@ -264,36 +272,54 @@ def plot_speedup(datas, titles, mode):
                     times_data[-1].append(val) 
             
             times.append(times_data)
-        
-        dataset_names = [d['name'] for d in data] #I assume both datas use the same datasets. Otherwise... absolute colapse....
-        
+                
         num_datasets = len(dataset_names)
         num_experiments = len(datas)
         width = 0.6
-        gap = 1
-        colors = ["red", "green", "blue"]
+        gap = 3
         
         for i in range(num_experiments):
             positions = [j*(num_experiments + gap) + i + 1 for j in range(num_datasets)]
             ax.boxplot(times[i], positions=positions, widths=width, patch_artist=True, boxprops=dict(facecolor=colors[i]), vert=False)
-        ax.set_yticks([(num_experiments + gap)/2 + i*(num_experiments + gap) for i in range(num_datasets)])
-        ax.set_yticklabels(dataset_names)
+        
+        legend_array = [mpatches.Patch(color=colors[i], label=titles[i]) for i in range(num_experiments)]
+        fig.legend(handles=legend_array)
+        
     elif mode == 'speedup':
-        pass
+        reference = datas[0]
+        
+        #More elegant way to make the same lists as above
+        reference_means = np.array([np.mean([run['t_algo'] / 1000 for run in dataset['runs']]) for dataset in reference]) 
+        reference_stds = np.array([np.std([run['t_algo'] / 1000 for run in dataset['runs']]) for dataset in reference])
+        
+        for i, data in enumerate(datas[1:]):            
+            data_means = np.array([np.mean([run['t_algo'] / 1000 for run in dataset['runs']]) for dataset in data])
+            data_stds = np.array([np.std([run['t_algo'] / 1000 for run in dataset['runs']]) for dataset in data])
+            
+            speedups = reference_means / data_means
+            speedups_std = np.sqrt((data_stds/data_means)**2 + (reference_stds/reference_means)**2)
+            
+            num_datasets = len(dataset_names)
+            num_experiments = len(datas) - 1
+            gap = 2
+            
+            positions = [j*(num_experiments + gap) + i + 1 for j in range(num_datasets)]
+            ax.errorbar(speedups, positions, xerr=speedups_std, label=titles[i], fmt='o', capsize=2)
+            
+            fig.legend()
     
+    ax.set_yticks([(num_experiments+gap)*i + (num_experiments-1)/2 + 1 for i in range(num_datasets)])
+    ax.set_yticklabels(dataset_names)
+        
     ax.set_ylabel("Datasets")
     ax.set_xlabel(xlabel_text)
     ax.set_title(title_text)
     ax.invert_yaxis()
-    
-    legend_array = [mpatches.Patch(color=colors[i], label=titles[i]) for i in range(num_experiments)]
-    plt.legend(handles=legend_array)
 
 
 def draw_boxes(data, time_unit_string):
     """Pipeline drawer"""
     fig, ax = plt.subplots(figsize=(12, 5))
-    colors = ("red", "green", "blue")
     
     n_stages = len(data[0])
     for row, item in enumerate(data):
@@ -343,7 +369,6 @@ def compare_tasks(datas, titles):
         num_experiments = len(datas)
         width = 0.6
         gap = 1
-        colors = ["red", "green", "blue"]
         
         for i in range(num_experiments):
             positions = [j*(num_experiments + gap) + i + 1 for j in range(num_tasks)]
@@ -405,7 +430,6 @@ def compare_tasks_sequential_pipeline(data_sequential_full, data_pipeline_full, 
         num_tasks = len(tasks)
         width = 0.6
         gap = 1
-        colors = ["red", "green", "blue"]
             
         for i, data in enumerate(((means_sequential, stds_sequential), (means_pipeline, stds_pipeline))):
             positions = [j*(num_experiments + gap) + i+1 for j in range(num_tasks)]

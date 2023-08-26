@@ -1,0 +1,9 @@
+/.vscode
+/asd.py
+/clean_verbose.py
+/evaluation
+/OLDResults
+/pipeline_tests
+/Results
+/run_data
+/__pycache__

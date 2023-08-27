@@ -236,7 +236,7 @@ def plot_speedup(datas, titles, mode):
     mode can be set to:
         'absolute': Print absolute time taken
         'frame': Print time per frame
-        'speedup': Speedup of all datas agaist the first 1 (Current version only two datas)
+        'speedup': Speedup of all datas agaist the first 1
     """
     fig, ax = plt.subplots(figsize=(12, 5))
     
@@ -279,7 +279,7 @@ def plot_speedup(datas, titles, mode):
         gap = 3
         
         for i in range(num_experiments):
-            positions = [j*(num_experiments + gap) + i + 1 for j in range(num_datasets)]
+            positions = [j*(num_experiments + gap) + i for j in range(num_datasets)]
             ax.boxplot(times[i], positions=positions, widths=width, patch_artist=True, boxprops=dict(facecolor=colors[i]), vert=False)
         
         legend_array = [mpatches.Patch(color=colors[i], label=titles[i]) for i in range(num_experiments)]
@@ -301,14 +301,14 @@ def plot_speedup(datas, titles, mode):
             
             num_datasets = len(dataset_names)
             num_experiments = len(datas) - 1
-            gap = 2
+            gap = 4
             
-            positions = [j*(num_experiments + gap) + i + 1 for j in range(num_datasets)]
-            ax.errorbar(speedups, positions, xerr=speedups_std, label=titles[i], fmt='o', capsize=2)
+            positions = [j*(num_experiments + gap) + i for j in range(num_datasets)]
+            ax.errorbar(speedups, positions, xerr=speedups_std, label=titles[i+1], fmt='o', capsize=2)
             
             fig.legend()
     
-    ax.set_yticks([(num_experiments+gap)*i + (num_experiments-1)/2 + 1 for i in range(num_datasets)])
+    ax.set_yticks([(num_experiments+gap)*i + (num_experiments-1)/2 for i in range(num_datasets)])
     ax.set_yticklabels(dataset_names)
         
     ax.set_ylabel("Datasets")
@@ -334,8 +334,6 @@ def draw_boxes(data, time_unit_string):
     
     legend_array = [mpatches.Patch(color=colors[i], label=f"Stage {i}") for i in range(n_stages)]
     plt.legend(handles=legend_array)
-
-    plt.show()
 
 
 def compare_tasks(datas, titles):
@@ -371,9 +369,9 @@ def compare_tasks(datas, titles):
         gap = 1
         
         for i in range(num_experiments):
-            positions = [j*(num_experiments + gap) + i + 1 for j in range(num_tasks)]
+            positions = [j*(num_experiments + gap) + i for j in range(num_tasks)]
             ax.barh(positions, times[i], xerr=stds[i], color=colors[i], capsize=2)        
-        ax.set_yticks([(num_experiments + gap)/2 + i*(num_experiments + gap) for i in range(num_tasks)])
+        ax.set_yticks([(num_experiments+gap)*i + (num_experiments-1)/2 for i in range(num_tasks)])
         ax.set_yticklabels(tasks)
     
         ax.set_ylabel("Tasks")
@@ -394,7 +392,7 @@ def compare_tasks_sequential_pipeline(data_sequential_full, data_pipeline_full, 
     def compute_mean_and_std(data):
         "From an array of runs. Returns mean and std with error propagation per run"
         stds_runs = np.std(data, axis=1)
-        return np.mean(data), np.sqrt(np.sum(stds_runs**2)/len(stds_runs))
+        return np.nanmean(data), np.sqrt(np.nansum(stds_runs**2)/len(stds_runs))
     
     
     for data_sequential, data_pipeline in zip(data_sequential_full, data_pipeline_full):
@@ -432,10 +430,10 @@ def compare_tasks_sequential_pipeline(data_sequential_full, data_pipeline_full, 
         gap = 1
             
         for i, data in enumerate(((means_sequential, stds_sequential), (means_pipeline, stds_pipeline))):
-            positions = [j*(num_experiments + gap) + i+1 for j in range(num_tasks)]
+            positions = [j*(num_experiments + gap) + i for j in range(num_tasks)]
             ax.barh(positions, data[0], xerr=data[1], color=colors[i], capsize=2)
         
-        ax.set_yticks([(num_experiments + gap)/2 + i*(num_experiments + gap) for i in range(num_tasks)])
+        ax.set_yticks([(num_experiments+gap)*i + (num_experiments-1)/2 for i in range(num_tasks)])
         ax.set_yticklabels(tasks)
         
         legend_array = [mpatches.Patch(color=colors[1], label="Pipeline"),
@@ -443,6 +441,8 @@ def compare_tasks_sequential_pipeline(data_sequential_full, data_pipeline_full, 
         plt.legend(handles=legend_array)
         
         ax.set_title(f"Tasks comparison for dataset {data_sequential['name']}")
+
+
 
 
 if __name__ == "__main__":

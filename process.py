@@ -5,10 +5,6 @@ import os
 
 from plotutils import *
 
-#file_dir=r'run_data/TrackingTimeStats.txt'
-file_dir = r'Results/test_comeback/output.dat'
-
-
 def process_orbslam_dir(directory, analysis='timestamp_legacy'):
     """Process a directory with several directories of structure dataset/run_x
     The analysis variable can be set to:
@@ -27,7 +23,7 @@ def process_orbslam_dir(directory, analysis='timestamp_legacy'):
             analysis = 'timestamp' #Change it for after (function is the same, just change the name of the file)
             analysis_file = "orbslam3_new.log"
         case "pipeline":
-            analysis_file = "test.dat"
+            analysis_file = "PipelineTimer.dat"
         case _:
             print("Invalid analysis mode")
             return None
@@ -64,15 +60,18 @@ def process_orbslam_dir(directory, analysis='timestamp_legacy'):
 
                         sub_dict["Other"] = T-t
                     elif analysis == 'pipeline':
-                        sub_dict = process_pipeline_times_output_file(lines, 1e3)
+                        sub_dict = process_pipeline_times_output_file(lines, 1e6)
                     
-                    file_path = os.path.join(directory, dataset, run, "SessionInfo.txt")
-                    print("\t", file_path)
-                    with open(file_path, "r") as f_info:
-                        lines_info = f_info.readlines()
-
-                        sub_dict["ATE"] = float(lines_info[3].split(':')[1].split(',')[0])
-                        sub_dict["n_frames"] = int(lines_info[4].split(':')[1])
+                    if analysis != 'pipeline':
+                        file_path = os.path.join(directory, dataset, run, "SessionInfo.txt")
+                        print("\t", file_path)
+                        with open(file_path, "r") as f_info:
+                            lines_info = f_info.readlines()
+                            
+                            #Compatibility for OLD versions
+                            if len(lines_info) > 3:
+                                sub_dict["ATE"] = float(lines_info[3].split(':')[1].split(',')[0])
+                                sub_dict["n_frames"] = int(lines_info[4].split(':')[1])
                     
 
                     data_dict["runs"].append(sub_dict)
@@ -167,6 +166,7 @@ def process_tracking_time_stats(lines):
             val = float(field.strip())
             if val > 10000 or val < 0: #Ignore broken cases (sometimes the value goes crazy??? A limit of 10s should strongly cover all real cases)
                 val = np.nan
+                print(f"\t{fieldh}:crazy value")
             data_dict[fieldh].append(val)
     
     for fieldh in data_dict.keys():
@@ -174,7 +174,6 @@ def process_tracking_time_stats(lines):
     
     return data_dict
             
-
 
 def process_pipeline_times_output_file(lines, time_factor_reduction=1, max_items=np.inf):
     lines = lines[1:] #Ignore header
@@ -224,103 +223,38 @@ def process_and_plot_pipeline_tokens(dir):
 
 
 if __name__ == "__main__":
-    """with open("Results/pipeline_file_loading/MH01/run_1/test.dat", "r") as f:
-        lines = f.readlines()
-        data_pipeline = process_pipeline_times_output_file(lines, 1e3)"""
-        
-    foo = process_orbslam_dir("Results/baseline", "timestamp")
-    #foo2 = process_orbslam_dir("Results/pipeline_file_loading", "timestamp")
-    #foo3 = process_orbslam_dir("Results/full_pipeline", "timestamp")
-    #foo_pip = process_orbslam_dir("Results/pipeline_file_loading", "pipeline")
+    base_data = process_orbslam_dir("Results/baseline", "orbslam")
+    pip_data = process_orbslam_dir("Results/full_pipeline", "orbslam")
+    pip_data_thread = process_orbslam_dir("Results/full_pipeline_thread", "orbslam")
     
-    #compare_tasks((foo,foo2,foo3), ("baseline", "pip_file","pip_full"))
-    #compare_tasks_sequential_pipeline(foo3, foo_pip, (("t_load_image",), ("t_track",)), ("Load image", "Track"))
+    #Show tasks times
+    plot_tasks_bars(base_data, 'datasets', version='Baseline')
+    plot_tasks_bars(base_data, 'runs', version='Baseline')
     
-    #asd = process_orbslam_dir("Results/test_rectify", "orbslam")
-    #plot_timeline_tasks(foo2, 0, 2 )
-    #plot_speedup([foo, foo2, foo3], ("baseline", "pip_file","pip_full"), mode='absolute')
-    #plt.show()
+    plot_tasks_bars(pip_data, 'datasets', version='Pipeline')
+    plot_tasks_bars(pip_data, 'runs', version='Pipeline')
     
+    compare_tasks((base_data,pip_data,pip_data_thread), ("Baseline", "Pipeline", "Pipeline_threads"))
     
+    pip_data = process_orbslam_dir("Results/full_pipeline", "pipeline")
+    compare_tasks_sequential_pipeline(base_data, pip_data, (("Load File",), 
+                                                            ("Image Rect","ORB ext","Stereo match"),
+                                                            ("Pose pred", "LM track", "KF dec")),
+                                                            ("Load image", "Process Image", "Track"))
+
     
-    
-    
-    #with open("pipeline_tests/output.dat", "r") as f:
-    """with open("Results/full_pipeline/MH05/run_1/PipelineTimer.dat", "r") as f:
+    base_data = process_orbslam_dir("Results/baseline", "timestamp")
+    pip_data = process_orbslam_dir("Results/full_pipeline", "timestamp")
+    pip_thread = process_orbslam_dir("Results/full_pipeline_thread", "timestamp")
+    plot_speedup([base_data, pip_data,pip_thread], ("Baseline", "Pipeline", "t"), mode='absolute')
+    plot_speedup([base_data, pip_data,pip_thread], ("Baseline", "Pipeline","t"), mode='frame')
+    plot_speedup([base_data, pip_data,pip_thread], ("Baseline", "Pipeline","t"), mode='speedup')
+
+    with open("Results/full_pipeline/MH01/run_1/PipelineTimer.dat", "r") as f:
         lines = f.readlines()
         data = process_pipeline_times_output_file(lines, 1e6, 250)
         
-        draw_boxes(data, "ms")"""
-        
-    #foo = process_orbslam_dir("Results/baseline", "orbslam")
-    #plot_tasks_bars(foo, 'datasets', version='Baseline')
-    #foo2 = process_orbslam_dir("Results/pipeline_file_loading", "timestamp")
-    #plot_tasks_bars(foo, 'datasets')
-    #plot_speedup([foo, foo2], ["baseline", "pipeline"], mode='frame')
-    #plt.show()
-    
-    """foo = process_orbslam_dir("Results/first_benchmark")
-    
-    for dataset in foo:
-        runs_track = [run["t_track"] for run in dataset["runs"]]
-        labels = [f"Run {i}" for i in range(len(dataset["runs"]))]
-        plot_cdf_frame_time(runs_track, labels)
-        plt.title(f"Different runs in {dataset['name']}")
-    
-   
-    
-    times = [[run['t_track'] for run in dataset["runs"]] for dataset in foo]
-    times = [np.concatenate(dataset) for dataset in times]
-    labels = [dataset['name'] for dataset in foo]
-    
-    plot_cdf_frame_time(times, labels, normalize=True)
-    plt.title(f"All runs agregated for different datasets")
-    
-    plt.show()"""
+        draw_boxes(data, "ms")
     
     
-    
-    
-    
-    """foo = process_orbslam_dir("Results/first_benchmark")
-    
-    for dataset in foo:
-        runs_track = [run["t_track"] for run in dataset["runs"]]
-        labels = [f"Run {i}" for i in range(len(dataset["runs"]))]
-        plot_cdf_frame_time(runs_track, labels)
-        plt.title(f"Different runs in {dataset['name']}")
-    
-   
-    
-    times = [[run['t_track'] for run in dataset["runs"]] for dataset in foo]
-    times = [np.concatenate(dataset) for dataset in times]
-    labels = [dataset['name'] for dataset in foo]
-    
-    plot_cdf_frame_time(times, labels, normalize=True)
-    plt.title(f"All runs agregated for different datasets")
-    
-    plt.show()"""
-    
-    
-    
-    
-    
-    
-    
-    
-    #LOAD A FILE AND READ MANUAL TIMESTAMPS
-    """with open(file_dir, "r") as f:
-        lines = f.readlines()
-    
-    t_frame, t_load_image, t_track, t_wait, t_algo, T = process_orbslam_output_file(lines)
-    
-    plt.plot(t_load_image, label='LOAD')
-    plt.plot(t_track, label='TRACK')
-    plt.plot(t_wait, label='WAIT')
-    
-    
-    plt.xlabel('# Frame')
-    plt.ylabel("Time per frame (ms)")
-    plt.legend()
     plt.show()
-"""

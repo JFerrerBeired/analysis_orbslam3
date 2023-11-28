@@ -3,15 +3,16 @@ import matplotlib.colors as colors
 from matplotlib import cm
 import matplotlib.patches as mpatches
 import os
+from scipy.stats import gmean
 
 from process import *
 
 #Exclude possible entries in data that do not represent tasks
 excluded_tasks = ('Total', 't_total', 't_algo', 't_frame', 
-                  'IMU preint', 'Image Resize',
+                   'Image Resize',
                   'ATE', 'n_frames')
 
-colors = ["red", "green", "blue"]
+colors = ["red", "green", "blue", "magenta", "yellow"]
 
 class GroupedFigure:
     """
@@ -317,34 +318,50 @@ def plot_speedup(datas, titles, mode):
     ax.invert_yaxis()
 
 
-def draw_boxes(data, time_unit_string):
+def draw_boxes(data, time_unit_string, stage_names = None, title = None, start_item=0, number_y_labels=35):
     """Pipeline drawer"""
     fig, ax = plt.subplots(figsize=(12, 5))
     
     n_stages = len(data[0])
     for row, item in enumerate(data):
+        if row < start_item:
+            continue
         ax.broken_barh(item, (row - 0.25, 0.5), facecolors=colors[:n_stages])
     
-    ax.set_ylim(len(data), -0.5)
-    ax.set_xlim(0, max([subitem[0] + subitem[1] for subitem in item for item in data]))
+    #Bolzano theorem (kinda...) The best padding is one of the two that are closest to 0
+    e = np.inf
+    for p in range(1, len(data)-start_item):
+        n_yticks = len(range(start_item,len(data), p))
+        last_e = e
+        e = n_yticks - number_y_labels
+        if e < 0:
+            break
+    padding = p if -e < last_e else p - 1
+    
+    ax.set_ylim(len(data), start_item-0.5)
+    ax.set_xlim(0, max([subitem[0] + subitem[1] for subitem in item for item in data])) #TODO: Dynamically adjust min depending on start_item 
     ax.set_xlabel('Execution Timelapse (%s)' % (time_unit_string))
-    ax.set_yticks([i for i in range(len(data))])
-    ax.set_yticklabels([f'Item {i+1}' for i in range(len(data))])
+    ax.set_yticks([i for i in range(start_item,len(data), padding)])
+    ax.set_yticklabels([f'Item {i+1}' for i in range(start_item, len(data), padding)])
 
     
-    legend_array = [mpatches.Patch(color=colors[i], label=f"Stage {i}") for i in range(n_stages)]
+    legend_array = [mpatches.Patch(color=colors[i], label=f"Stage {i}" if stage_names is None else stage_names[i]) for i in range(n_stages)]
     plt.legend(handles=legend_array)
+    
+    if title is not None:
+        ax.set_title(title)
 
 
 def compare_tasks(datas, titles):
     """Compares the task cost for the diferent versions provided.
     One figure per dataset."""
     
-    #Datasets consistency checkout
+    #Datasets consistency checkout (less restrictive than before. Allows for not using datasets if not included on the first data)
     datasets = [dataset['name'] for dataset in datas[0]]
     for data in datas:
-        for i, dataset in enumerate(data):
-            assert datasets[i] == dataset['name']
+        datasets_data = [d["name"] for d in data]
+        for dataset in datasets:
+            assert dataset in datasets_data
     
     tasks = [taskname for taskname in datas[0][0]['runs'][0].keys() if taskname not in excluded_tasks]
     
@@ -442,6 +459,84 @@ def compare_tasks_sequential_pipeline(data_sequential_full, data_pipeline_full, 
         
         ax.set_title(f"Tasks comparison for dataset {data_sequential['name']}")
 
+
+
+def plot_number_tokens_pipeline(datas, labels, reference=None, task = "Total", mode=None):
+    """ If reference is given, it computes speedup.
+        If mode is 'datasets' all datasets are plotted, otherwise only the geometric mean
+        If only one data is given in datas, the boxplot of all datasets is also plotted
+    """
+    fig, ax = plt.subplots(figsize=(12, 5))
+    if task == "Total":
+        reference_task = "t_total"
+        ax.set_title("Total execution time")
+    elif task == "Algo":
+        reference_task = "t_algo"
+        ax.set_title("Algorithm execution time")
+    
+    if reference is not None:
+        reference_means = np.array([np.mean([run[reference_task] / 1000 for run in dataset['runs']]) for dataset in reference]) 
+        reference_stds = np.array([np.std([run[reference_task] / 1000 for run in dataset['runs']]) for dataset in reference])
+    
+        for data, dataname in zip(datas, labels):
+            speedups = list()
+            speedups_std = list()
+            for i, dataset in enumerate(data):
+                n_tokens = sorted(data[dataset][task].keys())
+                means = np.array([np.mean(data[dataset][task][n_token]) for n_token in n_tokens])
+                stds = np.array([np.std(data[dataset][task][n_token]) for n_token in n_tokens])
+                #
+                
+                speedups.append(reference_means[i] / means)
+                speedups_std.append(np.sqrt((stds/means)**2 + (reference_stds[i]/reference_means[i])**2))
+            
+                #ax.errorbar(n_tokens, speedups[-1], speedups_std[-1], capsize=2, label=dataset+dataname)
+            speedups = np.array(speedups)
+            speedups_std = np.array(speedups_std)
+            
+            gmeans = gmean(speedups)
+            gstds = gmeans * np.sqrt(np.sum((speedups_std/speedups)**2, axis=0)) / speedups_std.shape[0]
+            
+            ax.errorbar(n_tokens, gmeans, gstds, label="Geometric mean"+dataname, capsize=2, lw=3 if mode=='datasets' else 2)
+            
+            if (len(datas) == 1): #Only show boxplot if only one data is given
+                ax.boxplot(speedups, positions=n_tokens)
+            
+                if mode=='datasets':
+                    for i, dataset in enumerate(data):
+                        ax.errorbar(n_tokens, speedups[i], speedups_std[i], lw=1, capsize=2,label=dataset)            
+    else:
+        raise(NotImplementedError) #Total execution time
+    
+    ax.set_ylabel("Speedup")
+    ax.set_xlabel('Number of pipeline tokens')
+    
+    plt.legend(ncol=2)
+    
+def plot_histogram_tasks(data, normalize=False):
+    """Plot the histogram of time taken by each task.
+        One dataset per figure"""
+    #TODO??: One task per figure with all datasets. See differences per task in dataset?
+    
+    
+    for dataset in data:
+        fig, ax = plt.subplots(figsize=(12, 5))
+        
+        tasks = [taskname for taskname in dataset['runs'][0].keys() if taskname not in excluded_tasks]
+
+        for t, task in enumerate(tasks):
+            task_times = list()
+            for i, run in enumerate(dataset['runs']):
+                task_times.extend(run[task])
+            
+            ax.hist(task_times, bins='auto', histtype='step', label=task, density=normalize)
+
+        fig.legend()
+
+        title_str = f"Histogram for {dataset['name']}"
+        ax.set_title(title_str)
+        ax.set_xlabel("Time elapsed per frame (ms)")
+        ax.set_ylabel(f"%s Frequency" % ("Normalized" if normalize else ""))
 
 
 

@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import re
 import os
+from collections import defaultdict
 
 from plotutils import *
 
@@ -175,7 +176,9 @@ def process_tracking_time_stats(lines):
     return data_dict
             
 
-def process_pipeline_times_output_file(lines, time_factor_reduction=1, max_items=np.inf):
+def process_pipeline_times_output_file(lines, time_factor_reduction=1, max_items=np.inf, max_time=None):
+    #If max_time is given, max_items is ignored
+    
     lines = lines[1:] #Ignore header
     
     #Search for number of items/stages
@@ -191,15 +194,34 @@ def process_pipeline_times_output_file(lines, time_factor_reduction=1, max_items
     for line in lines:
         item, stage, t_start, t_end = [int(_) for _ in line.split('\t')]
         
-        if item >= n_items:
+        if max_time is not None:
+            if t_start > max_time:
+                continue #Skip if over max_time
+        elif item >= n_items:
             continue #Skip if over max_items
+        
         
         t_start /= time_factor_reduction
         t_end /= time_factor_reduction
         
         data[item][stage] = (t_start, t_end-t_start)
     
+    if max_time is not None: #Filter uncompleted items
+        i=0
+        for d in data:
+            broken = False
+            for s in d:
+                if s == -1:
+                    broken=True
+                    break
+            if broken:
+                break
+            i+=1
+        data = data[:i]
+        
+    
     return data
+
 
 def process_and_plot_pipeline_tokens(dir):
     #with open("pipeline_tests/n_tokens/output.dat", "r") as f: Example file name
@@ -222,39 +244,142 @@ def process_and_plot_pipeline_tokens(dir):
         plt.show()
 
 
+def process_number_tokens_pipeline(directory):
+    """Expected path is number_token/dataset/run/
+    
+    Takes the total time via the START and END timers on orbslam3_output.log
+    Takes the tasks total time via TrackingTimeStats.txt
+    The output dictionary has the structure: 
+        dic[dataset][task] is an array of times correspondent to number of tokens kept in array dict[n_tokens]
+    It is assumed that all the subfolders have the same number of tokens and datasets computed
+    """
+    data_dict = defaultdict(lambda: defaultdict(lambda: dict()))
+    n_tokens = list()
+    for n_token in os.listdir(directory):
+       
+        for dataset in os.listdir(os.path.join(directory, n_token)):
+            execution_times = list()
+            algorithm_times = list()
+            for run in os.listdir(os.path.join(directory, n_token, dataset)):
+                file_output = os.path.join(directory, n_token, dataset, run, 'orbslam3_output.log')
+                file_tracking = os.path.join(directory, n_token, dataset, run, 'TrackingTimeStats.txt')
+                
+                with open(file_output, "r") as f:
+                    lines = f.readlines()
+                    
+                    for line in lines:
+                        fields = line.split('\t')
+                        if fields[0] == 'START':
+                            start = int(fields[1])
+                        elif fields[0] == 'ALGO_START':
+                            t1 = int(fields[1])                            
+                        elif fields[0] == 'ALGO_END':
+                            t2 = int(fields[1])
+                        elif fields[0] == 'END':
+                            end = int(fields[1])
+                    
+                    execution_time = (end - start) /  1e9 # ns to s
+                    algorithm_time = (t2 - t1) /  1e9 # ns to s
+                execution_times.append(execution_time)
+                algorithm_times.append(algorithm_time)
+                """with open(file_tracking, "r") as f:
+                    lines = f.readlines()
+                    
+                    data_dict = process_tracking_time_stats(lines)
+                    
+                    for k,v in data_dict.items(): #I want total time spent per task, not by frame
+                        data_dict[k] = np.nansum(v)/1e3 # ms to s
+                    task_time = np.sum(list(data_dict.values())) - data_dict['Total'] #Time spent in registered tasks
+                    data_dict['TotalTracking'] = data_dict['Total']
+                    data_dict['Total'] = execution_time
+                    data_dict['OtherTracking'] = data_dict['TotalTracking'] - task_time
+                    data_dict['Other'] = data_dict['Total'] - data_dict['TotalTracking']
+                    
+                    for k,v in data_dict:
+                        print(k, "\t", v)
+                    
+                    3"""
+            data_dict[dataset]["Total"][int(n_token)] = execution_times
+            data_dict[dataset]["Algo"][int(n_token)] = algorithm_time
+
+    return data_dict
+
+
 if __name__ == "__main__":
-    base_data = process_orbslam_dir("Results/baseline", "orbslam")
-    pip_data = process_orbslam_dir("Results/full_pipeline", "orbslam")
-    pip_data_thread = process_orbslam_dir("Results/full_pipeline_thread", "orbslam")
+    # base_data = process_orbslam_dir("Results/baseline", "timestamp")
+    # token_data_parallel = process_number_tokens_pipeline("Results/pipeline_token_parallel")
+    # # token_data_thread = process_number_tokens_pipeline("Results/pipeline_token_thread")
+    
+    # plot_number_tokens_pipeline((token_data_parallel,), ("",), base_data, task="Algo", mode='datasets')
+
+    # base_data = process_orbslam_dir("Results/fooo", "orbslam")
+    # d = [base_data]
+    # for n in (5, 10, 15, 24, 30):
+    #     with open(f"Results/pipeline_token_parallel/{n}/MH01/run_2/PipelineTimer.dat", "r") as f:
+    #         pip_data = process_pipeline_times_output_file(f.readlines(), 1e6, max_time=1e9)
+           
+    #     draw_boxes(pip_data, "ms", ("Read File", "Extract Features", "Track"), f"{n} pipeline tokens")
+        
+    #     d.append(process_orbslam_dir(f"Results/pipeline_token_parallel/{n}", "orbslam"))
+    
+    
+    # #IDEA: Measure time last stage vs total algo time
+    # """    for n in (5, 10, 15, 24, 30):
+    #     pip_data = process_orbslam_dir(f"Results/pipeline_token_parallel/{n}", "pipeline")[0]["runs"][0]
+
+    #     Ttrack = np.sum([i[2][1] for i in pip_data])
+    #     time_data = process_orbslam_dir(f"Results/pipeline_token_parallel/{n}", "timestamp")[0]["runs"][0]["t_algo"]
+        
+    #     print(time_data-Ttrack)"""
+    
+    # plot_tasks_bars(base_data, 'datasets', version='Baseline')
+
+    # #compare_tasks(d, ("base", "5", "10", "15", "24"))
+    # plot_histogram_tasks(base_data)
+    # plt.show()
+    
+    base_data = process_orbslam_dir("Results/new_baseline", "orbslam")
+    base_data2 = process_orbslam_dir("Results/new_pipeline", "orbslam")
+    base_data3 = process_orbslam_dir("Results/new_pipeline2", "orbslam")
+    # pip_data = process_orbslam_dir("Results/full_pipeline", "orbslam")
+    # pip_data_thread = process_orbslam_dir("Results/full_pipeline_thread", "orbslam")
+    
+    with open(f"Results/new_pipeline2/MH01/run_1/PipelineTimer.dat", "r") as f:
+        pip_data = process_pipeline_times_output_file(f.readlines(), 1e6, max_time=1e9)
+        
+    draw_boxes(pip_data, "ms", ("Read File", "Exctract Features", "Track"), f"{15} pipeline tokens")
+    
+    compare_tasks((base_data,base_data2,base_data3), ("Baseline", "Pipeline1", "Pipeline2"))
     
     #Show tasks times
-    plot_tasks_bars(base_data, 'datasets', version='Baseline')
-    plot_tasks_bars(base_data, 'runs', version='Baseline')
+    # plot_tasks_bars(base_data, 'datasets', version='Baseline')
+    # plot_tasks_bars(base_data2, 'datasets', version='Pipeline')
+    #plot_tasks_bars(base_data, 'runs', version='Baseline')
     
-    plot_tasks_bars(pip_data, 'datasets', version='Pipeline')
-    plot_tasks_bars(pip_data, 'runs', version='Pipeline')
+    # plot_tasks_bars(pip_data, 'datasets', version='Pipeline')
+    # plot_tasks_bars(pip_data, 'runs', version='Pipeline')
     
-    compare_tasks((base_data,pip_data,pip_data_thread), ("Baseline", "Pipeline", "Pipeline_threads"))
+    # compare_tasks((base_data,pip_data,pip_data_thread), ("Baseline", "Pipeline", "Pipeline_threads"))
     
-    pip_data = process_orbslam_dir("Results/full_pipeline", "pipeline")
-    compare_tasks_sequential_pipeline(base_data, pip_data, (("Load File",), 
-                                                            ("Image Rect","ORB ext","Stereo match"),
-                                                            ("Pose pred", "LM track", "KF dec")),
-                                                            ("Load image", "Process Image", "Track"))
+    # pip_data = process_orbslam_dir("Results/full_pipeline", "pipeline")
+    # compare_tasks_sequential_pipeline(base_data, pip_data, (("Load File",), 
+    #                                                         ("Image Rect","ORB ext","Stereo match"),
+    #                                                         ("Pose pred", "LM track", "KF dec")),
+    #                                                         ("Load image", "Process Image", "Track"))
 
     
-    base_data = process_orbslam_dir("Results/baseline", "timestamp")
-    pip_data = process_orbslam_dir("Results/full_pipeline", "timestamp")
-    pip_thread = process_orbslam_dir("Results/full_pipeline_thread", "timestamp")
-    plot_speedup([base_data, pip_data,pip_thread], ("Baseline", "Pipeline", "t"), mode='absolute')
-    plot_speedup([base_data, pip_data,pip_thread], ("Baseline", "Pipeline","t"), mode='frame')
-    plot_speedup([base_data, pip_data,pip_thread], ("Baseline", "Pipeline","t"), mode='speedup')
+    # base_data = process_orbslam_dir("Results/baseline", "timestamp")
+    # pip_data = process_orbslam_dir("Results/full_pipeline", "timestamp")
+    # pip_thread = process_orbslam_dir("Results/full_pipeline_thread", "timestamp")
+    # plot_speedup([base_data, pip_data,pip_thread], ("Baseline", "Pipeline", "t"), mode='absolute')
+    # plot_speedup([base_data, pip_data,pip_thread], ("Baseline", "Pipeline","t"), mode='frame')
+    # plot_speedup([base_data, pip_data,pip_thread], ("Baseline", "Pipeline","t"), mode='speedup')
 
-    with open("Results/full_pipeline/MH01/run_1/PipelineTimer.dat", "r") as f:
-        lines = f.readlines()
-        data = process_pipeline_times_output_file(lines, 1e6, 250)
+    # with open("Results/full_pipeline/MH01/run_1/PipelineTimer.dat", "r") as f:
+    #     lines = f.readlines()
+    #     data = process_pipeline_times_output_file(lines, 1e6, 250)
         
-        draw_boxes(data, "ms")
+    #     draw_boxes(data, "ms")
     
     
     plt.show()

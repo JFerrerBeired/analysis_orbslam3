@@ -3,7 +3,7 @@ import matplotlib.colors as colors
 from matplotlib import cm
 import matplotlib.patches as mpatches
 import os
-from scipy.stats import gmean
+from scipy.stats import gmean, f_oneway
 
 from process import *
 
@@ -12,7 +12,7 @@ excluded_tasks = ('Total', 't_total', 't_algo', 't_frame',
                    'Image Resize',
                   'ATE', 'n_frames')
 
-colors = ["red", "green", "blue", "magenta", "yellow"]
+colors = ["red", "green", "blue", "magenta", "yellow", "sandybrown", "greenyellow", "violet", "darkolivegreen"]
 
 class GroupedFigure:
     """
@@ -238,6 +238,7 @@ def plot_speedup(datas, titles, mode):
         'absolute': Print absolute time taken
         'frame': Print time per frame
         'speedup': Speedup of all datas agaist the first 1
+        'error': Error of all datas
     """
     fig, ax = plt.subplots(figsize=(12, 5))
     
@@ -248,9 +249,15 @@ def plot_speedup(datas, titles, mode):
         case 'frame':
             xlabel_text = "Time elapsed per frame (ms)"
             title_text = "Mean execution time per frame version comparison"
+        case 'frequency':
+            xlabel_text = "Frames per second (Hz)"
+            title_text = "Frequency version comparison"
         case 'speedup':
             xlabel_text = "Speedup"
             title_text = f"Speedup comparison Vs {titles[0]} version"
+        case 'error':
+            xlabel_text = "ATE"
+            title_text = f"Absolute Trajectory Error (ATE) comparison"
         case _:
             print("Invalid plotting mode")
             return
@@ -261,7 +268,7 @@ def plot_speedup(datas, titles, mode):
         for i, dataset in enumerate(data):
             assert dataset_names[i] == dataset['name']
     
-    if mode in ('absolute', 'frame'):
+    if mode in ('absolute', 'frame', 'frequency'):
         times = list()
         for data in datas:
             times_data = list()
@@ -270,6 +277,8 @@ def plot_speedup(datas, titles, mode):
                 for run in dataset['runs']:
                     #Convert to time per frame or from seconds from milli depending on frame/absolute
                     val = run['t_algo'] / (run["n_frames"] if mode=='frame' else 1000)
+                    if mode=='frequency':
+                        val = run["n_frames"]/val
                     times_data[-1].append(val) 
             
             times.append(times_data)
@@ -308,6 +317,37 @@ def plot_speedup(datas, titles, mode):
             ax.errorbar(speedups, positions, xerr=speedups_std, label=titles[i+1], fmt='o', capsize=2)
             
             fig.legend()
+    elif mode == 'error':
+        error = list()
+        for data in datas:
+            error_data = list()
+            for dataset in data:
+                error_data.append(list())
+                for run in dataset['runs']:
+                    #Convert to time per frame or from seconds from milli depending on frame/absolute
+                    val = run['ATE']
+                    error_data[-1].append(val) 
+            
+            error.append(error_data)
+        
+        #Compute p-value
+
+        for i in range(len(error[0])):
+            ed = [e[i] for e in error]
+            s, p = f_oneway(*ed)
+            dataset_names[i] += f" (p={round(p, 2)})"
+
+        num_datasets = len(dataset_names)
+        num_experiments = len(datas)
+        width = 0.6
+        gap = 3
+        
+        for i in range(num_experiments):
+            positions = [j*(num_experiments + gap) + i for j in range(num_datasets)]
+            ax.boxplot(error[i], positions=positions, widths=width, patch_artist=True, boxprops=dict(facecolor=colors[i]), vert=False)
+        
+        legend_array = [mpatches.Patch(color=colors[i], label=titles[i]) for i in range(num_experiments)]
+        fig.legend(handles=legend_array)
     
     ax.set_yticks([(num_experiments+gap)*i + (num_experiments-1)/2 for i in range(num_datasets)])
     ax.set_yticklabels(dataset_names)

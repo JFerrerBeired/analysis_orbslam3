@@ -312,16 +312,17 @@ if __name__ == "__main__":
     
     # plot_number_tokens_pipeline((token_data_parallel,), ("",), base_data, task="Algo", mode='datasets')
 
-    # base_data = process_orbslam_dir("Results/fooo", "orbslam")
-    # d = [base_data]
-    # for n in (5, 10, 15, 24, 30):
-    #     with open(f"Results/pipeline_token_parallel/{n}/MH01/run_2/PipelineTimer.dat", "r") as f:
-    #         pip_data = process_pipeline_times_output_file(f.readlines(), 1e6, max_time=1e9)
+    base_data = process_orbslam_dir("Results/baseline", "timestamp")
+    d = [base_data]
+    for n in (5, 10, 15, 24, 30):
+        # with open(f"Results/pipeline_token_parallel/{n}/MH01/run_2/PipelineTimer.dat", "r") as f:
+        #     pip_data = process_pipeline_times_output_file(f.readlines(), 1e6, max_time=1e9)
            
-    #     draw_boxes(pip_data, "ms", ("Read File", "Extract Features", "Track"), f"{n} pipeline tokens")
+        # draw_boxes(pip_data, "ms", ("Read File", "Extract Features", "Track"), f"{n} pipeline tokens")
         
-    #     d.append(process_orbslam_dir(f"Results/pipeline_token_parallel/{n}", "orbslam"))
-    
+        d.append(process_orbslam_dir(f"Results/pipeline_token_parallel_old/{n}", "timestamp"))
+    plot_speedup(d, ("b", "5", "10", "15", "24", "30"), mode='error')
+    plot_speedup(d, ("b", "5", "10", "15", "24", "30"), mode='frequency')
     
     # #IDEA: Measure time last stage vs total algo time
     # """    for n in (5, 10, 15, 24, 30):
@@ -338,21 +339,24 @@ if __name__ == "__main__":
     # plot_histogram_tasks(base_data)
     # plt.show()
     
-    base_data = process_orbslam_dir("Results/new_baseline", "orbslam")
-    base_data2 = process_orbslam_dir("Results/new_pipeline", "orbslam")
-    base_data3 = process_orbslam_dir("Results/new_pipeline2", "orbslam")
+    # base_data = process_orbslam_dir("Results/baseline", "timestamp")
+    # base_data2 = process_orbslam_dir("Results/pipeline_token_parallel_old/5", "timestamp")
+    # base_data3 = process_orbslam_dir("Results/pipeline_token_parallel_old/20", "orbslam")
     # pip_data = process_orbslam_dir("Results/full_pipeline", "orbslam")
     # pip_data_thread = process_orbslam_dir("Results/full_pipeline_thread", "orbslam")
     
-    with open(f"Results/new_pipeline2/MH01/run_1/PipelineTimer.dat", "r") as f:
+    """ with open(f"Results/new_pipeline2/MH01/run_1/PipelineTimer.dat", "r") as f:
         pip_data = process_pipeline_times_output_file(f.readlines(), 1e6, max_time=1e9)
         
-    draw_boxes(pip_data, "ms", ("Read File", "Exctract Features", "Track"), f"{15} pipeline tokens")
+    draw_boxes(pip_data, "ms", ("Read File", "Exctract Features", "Track"), f"{15} pipeline tokens")"""
     
-    compare_tasks((base_data,base_data2,base_data3), ("Baseline", "Pipeline1", "Pipeline2"))
+    # compare_tasks((base_data,base_data2,base_data3), ("Baseline", "Pipeline1", "Pipeline2"))
     
     #Show tasks times
     # plot_tasks_bars(base_data, 'datasets', version='Baseline')
+    # plot_histogram_tasks(base_data)
+    # plot_speedup((base_data, base_data2), ("1", "2"), mode='error')
+
     # plot_tasks_bars(base_data2, 'datasets', version='Pipeline')
     #plot_tasks_bars(base_data, 'runs', version='Baseline')
     

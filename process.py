@@ -305,24 +305,54 @@ def process_number_tokens_pipeline(directory):
     return data_dict
 
 
-if __name__ == "__main__":
-    # base_data = process_orbslam_dir("Results/baseline", "timestamp")
-    # token_data_parallel = process_number_tokens_pipeline("Results/pipeline_token_parallel")
-    # # token_data_thread = process_number_tokens_pipeline("Results/pipeline_token_thread")
+def process_grainsize(directory):
+    """Expected path is grainsize/dataset/run/
     
-    # plot_number_tokens_pipeline((token_data_parallel,), ("",), base_data, task="Algo", mode='datasets')
+    Takes the total time via the START and END timers on orbslam3_output.log
+    Takes the tasks total time via TrackingTimeStats.txt
+    The output dictionary has the structure: 
+        dic[dataset][task] is an array of times correspondent to number of tokens kept in array dict[n_tokens]
+    It is assumed that all the subfolders have the same number of tokens and datasets computed
+    """
+    data_dict = defaultdict()
+    n_grainsizes = list()
+    for n_grainsize in os.listdir(directory):
+        d = process_orbslam_dir(os.path.join(directory, n_grainsize), "orbslam")
+        data_dict[int(n_grainsize)] = d
 
-    base_data = process_orbslam_dir("Results/baseline", "timestamp")
-    d = [base_data]
-    for n in (5, 10, 15, 24, 30):
-        # with open(f"Results/pipeline_token_parallel/{n}/MH01/run_2/PipelineTimer.dat", "r") as f:
-        #     pip_data = process_pipeline_times_output_file(f.readlines(), 1e6, max_time=1e9)
-           
-        # draw_boxes(pip_data, "ms", ("Read File", "Extract Features", "Track"), f"{n} pipeline tokens")
+    return data_dict
+
+
+if __name__ == "__main__":
+    
+    
+    # d = process_grainsize('Results/grainsize')
+    # plot_grainsize(d, "Pose pred")
+    # plot_grainsize(d, "PF1")
+    # plot_grainsize(d, "PF2")
+    # 3
+    
+    
+    
+    
+    base_data = process_orbslam_dir("Results/baseline", "orbslam")
+    # token_data_parallel = process_number_tokens_pipeline("Results/pipeline_token_parallel")
+    # # # token_data_thread = process_number_tokens_pipeline("Results/pipeline_token_thread")
+    
+    # #plot_number_tokens_pipeline((token_data_parallel,), ("",), base_data, task="Total", mode='datasets')
+
+    # # base_data = process_orbslam_dir("Results/baseline", "timestamp")
+    # d = [base_data]
+    # for n in (1, 2):
+    #     with open(f"Results/pipeline_token_parallel/{n}/MH01/run_2/PipelineTimer.dat", "r") as f:
+    #         pip_data = process_pipeline_times_output_file(f.readlines(), 1e6, max_time=1e9)
         
-        d.append(process_orbslam_dir(f"Results/pipeline_token_parallel_old/{n}", "timestamp"))
-    plot_speedup(d, ("b", "5", "10", "15", "24", "30"), mode='error')
-    plot_speedup(d, ("b", "5", "10", "15", "24", "30"), mode='frequency')
+    #     draw_boxes(pip_data, "ms", ("Read File", "Extract Features", "Track"), f"{n} pipeline tokens")
+        
+    #     d.append(process_orbslam_dir(f"Results/pipeline_token_parallel_old/{n}", "timestamp"))
+    #     d.append(process_orbslam_dir(f"Results/pipeline_token_parallel/{n}", "timestamp"))
+    # plot_speedup(d, ("b", "5", "10", "15", "24", "30"), mode='error')
+    # plot_speedup(d, ("b", "5", "10", "15", "24", "30"), mode='frequency')
     
     # #IDEA: Measure time last stage vs total algo time
     # """    for n in (5, 10, 15, 24, 30):
@@ -335,8 +365,9 @@ if __name__ == "__main__":
     
     # plot_tasks_bars(base_data, 'datasets', version='Baseline')
 
-    # #compare_tasks(d, ("base", "5", "10", "15", "24"))
-    # plot_histogram_tasks(base_data)
+    # plot_speedup(d, ("base", "1o", "2o", "1", "2"), "frequency")
+    # compare_tasks(d, ("base", "5", "10", "15", "24", "30"))
+    plot_histogram_tasks(base_data)
     # plt.show()
     
     # base_data = process_orbslam_dir("Results/baseline", "timestamp")

@@ -500,7 +500,6 @@ def compare_tasks_sequential_pipeline(data_sequential_full, data_pipeline_full, 
         ax.set_title(f"Tasks comparison for dataset {data_sequential['name']}")
 
 
-
 def plot_number_tokens_pipeline(datas, labels, reference=None, task = "Total", mode=None):
     """ If reference is given, it computes speedup.
         If mode is 'datasets' all datasets are plotted, otherwise only the geometric mean
@@ -553,7 +552,7 @@ def plot_number_tokens_pipeline(datas, labels, reference=None, task = "Total", m
     
     plt.legend(ncol=2)
     
-def plot_histogram_tasks(data, normalize=False):
+def plot_histogram_tasks(data, normalize=False, save_fig=False, max_range = None):
     """Plot the histogram of time taken by each task.
         One dataset per figure"""
     #TODO??: One task per figure with all datasets. See differences per task in dataset?
@@ -577,8 +576,34 @@ def plot_histogram_tasks(data, normalize=False):
         ax.set_title(title_str)
         ax.set_xlabel("Time elapsed per frame (ms)")
         ax.set_ylabel(f"%s Frequency" % ("Normalized" if normalize else ""))
+        
+        if max_range is not None:
+            ax.set_xlim(0, max_range)
+            
 
 
+
+def plot_grainsize(data, task):
+    """ If reference is given, it computes speedup.
+        If mode is 'datasets' all datasets are plotted, otherwise only the geometric mean
+        If only one data is given in datas, the boxplot of all datasets is also plotted
+    """
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.set_yscale('log')
+    ax.set_xscale('log')
+
+    grainsizes = sorted(list(data.keys()))
+    times = list()
+    times_stds = list()
+    
+    for grainsize in grainsizes:
+        d = data[grainsize][0]['runs'][0][task]
+        times.append(np.nanmean(d))
+        times_stds.append(np.nanstd(d))
+    
+    ax.errorbar(grainsizes, times, times_stds)
+
+    
 
 if __name__ == "__main__":
     with open(file_dir, "r") as f:
